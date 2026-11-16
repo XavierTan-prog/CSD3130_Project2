@@ -1,0 +1,23 @@
+# Build output
+build/
+out/
+cmake-build-*/
+vcpkg_installed/
+CMakeUserPresets.json
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+
+# Generated images (keep the folder itself)
+images/output/*
+!images/output/.gitkeep
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Benchmark output images
+bench_*.png

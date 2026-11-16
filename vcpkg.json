@@ -1,0 +1,21 @@
+{
+  "name": "seam-carving",
+  "version": "0.1.0",
+  "builtin-baseline": "9eec002df1cd109f8f104cd966a763daf9751489",
+  "dependencies": [
+    {
+      "name": "opencv4",
+      "default-features": false,
+      "features": [
+        "fs",
+        "highgui",
+        "intrinsics",
+        "jpeg",
+        "png",
+        "thread",
+        { "name": "win32ui", "platform": "windows" }
+      ]
+    },
+    "catch2"
+  ]
+}
