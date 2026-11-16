@@ -20,16 +20,61 @@ in brackets refer to the assignment brief.
 | Sat 21 - Mon 23 Nov | Quiz preparation |
 | Tue 24 Nov | Project quiz |
 
-## 1. Setup
+## 1. Setup (every teammate does this once)
 
-- [x] CMake + vcpkg build, `run.bat` / `clean.bat` / `rebuild.bat`
-- [x] Project scaffold: headers, placeholder algorithms, seam removal, resize loop
-- [x] Interactive `seam_carve` with side-by-side preview window
-- [x] Starter unit tests and GitHub Actions workflow
-- [ ] Commit and push the latest changes (including the test images)
-- [ ] Confirm the GitHub Actions run is green
-- [ ] Team ID and members (with SIT IDs) in `README.md`
-- [ ] Every teammate has cloned the repo and run `run.bat` successfully
+The repo is already scaffolded and pushed. Each person follows the steps
+below on their own machine.
+
+### 1.1 Install the tools
+
+- [ ] **Visual Studio 2022 (version 17.6 or newer) or Visual Studio 2026**, with the **"Desktop development with C++"** workload. This includes the compiler, CMake and vcpkg, so nothing else needs installing.
+- [ ] **Git** (or GitHub Desktop).
+
+### 1.2 Get the code
+
+- [ ] Clone the repo: `git clone https://github.com/XavierTan-prog/CSD3130_Project2.git`
+- [ ] Put it in a normal folder such as `C:\dev\`, **not** inside OneDrive, Google Drive or Dropbox. Syncing slows the build a lot and can corrupt the Git data.
+
+### 1.3 Generate the solution
+
+- [ ] Double-click **`run.bat`** in the repo folder. It needs no arguments.
+- [ ] Wait for it to finish. **The first run compiles OpenCV and takes a long time**, with long silent stretches at `Building x64-windows-dbg` and `Building x64-windows-rel`. This is normal. Later runs take seconds.
+- [ ] Do not click inside the black console window while it runs: that pauses it (the title bar shows "Select"). Press Enter to resume if it happens.
+- [ ] When it finishes, Visual Studio opens `build\seam_carving.sln` by itself.
+
+### 1.4 Check that it works
+
+- [ ] In Visual Studio: **Build > Build Solution**. It should finish with no errors.
+- [ ] Press **Ctrl+F5** (startup project `seam_carve`). Press Enter at each prompt to accept the defaults. A window should open showing the original image next to the result.
+  - The result looks like a plain crop for now. That is expected: the algorithms are still placeholders.
+- [ ] Right-click the **`tests`** project > **Set as Startup Project**, press **Ctrl+F5**. Expect `All tests passed` (three more tests are hidden until the algorithms are written).
+- [ ] Set `seam_carve` back as the startup project.
+
+### 1.5 If something goes wrong
+
+| Problem | What to do |
+| --- | --- |
+| `CMake was not found` | The C++ workload is missing. Add it in the Visual Studio Installer. |
+| `vcpkg was not found` | Visual Studio 2022 is older than 17.6. Update it, or install vcpkg at `C:\dev\vcpkg`. |
+| Build is broken or behaving oddly | Close Visual Studio, then double-click **`rebuild.bat`** (deletes `build\` and regenerates everything). |
+| `clean.bat` says it could not delete `build\` | Close Visual Studio first; it locks the files. |
+| A new source file does not appear in the solution | Add it to `CMakeLists.txt`, then build. Do not add files through the solution; it is regenerated. |
+
+### 1.6 How we work in this repo
+
+- [ ] Add your name and SIT ID to the **Team** line in `README.md`.
+- [ ] Put your name in the **Owner** column for your tasks in the sections below.
+- [ ] Work on your own branch, e.g. `git checkout -b dp`, and pull `main` before you start each session.
+- [ ] Before merging into `main`: the solution builds, the tests pass, and the GitHub Actions check on your push is green.
+- [ ] When you finish a method, delete the `[.]` tag from its hidden test in `tests/test_seams.cpp`.
+- [ ] Log every AI prompt you use in `report/ai_usage.md` as you go. The report needs them.
+- [ ] Only `build\` and the output images are ignored by Git. Do not commit anything from `build\`.
+
+### 1.7 Team-level setup
+
+- [x] Scaffold, build scripts, preview window, starter tests and CI workflow pushed to `main`
+- [ ] GitHub Actions run on `main` confirmed green
+- [ ] All teammates added as collaborators on the GitHub repo
 - [ ] Owners assigned for every section below
 
 ## 2. Core implementation

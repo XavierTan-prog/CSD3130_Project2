@@ -1,4 +1,4 @@
-#include "seam_carving/energy.hpp"
+    #include "seam_carving/energy.hpp"
 
 namespace sc {
 
