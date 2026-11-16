@@ -1,5 +1,7 @@
 # Seam Carving: DP vs Greedy vs Graph Cut
 
+[![CI](https://github.com/XavierTan-prog/CSD3130_Project2/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/XavierTan-prog/CSD3130_Project2/actions/workflows/ci.yml)
+
 CSD3130 Assignment 2. Content-aware image resizing with the seam-finding
 step implemented three ways: dynamic programming, greedy, and graph cut
 (min-cut / max-flow).

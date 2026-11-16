@@ -19,3 +19,4 @@ declaration of how AI was used and the main prompts.
 | 2026-11-16 | Setup | Claude | "Repoint the benchmark and README to the new image and add the small sample back" | Updated launch arguments and README; restored `sample.png` |
 | 2026-11-16 | Planning | Claude | "Draft a to-do list for this assignment and put it in a docs folder" | `docs/TODO.md` |
 | 2026-11-16 | Planning | Claude | "Check the pushes and rewrite the setup part of the to-do so teammates know what to do" | Setup instructions in `docs/TODO.md` |
+| 2026-11-16 | CI/CD | Claude | "What is needed for the CI/CD bonus? Add the badge and tell me how to set up branch protection" | CI status badge in `README.md`; branch protection steps |
