@@ -5,6 +5,7 @@
 #include "seam_carving/graph_cut.hpp"
 #include "seam_carving/greedy.hpp"
 #include "seam_carving/seam.hpp"
+#include "seam_carving/visualize.hpp"
 
 namespace {
 
@@ -54,6 +55,33 @@ TEST_CASE("carve reaches the target size") {
     const cv::Mat out = sc::carve(img, 5, 4, sc::Method::DP);
     REQUIRE(out.cols == 5);
     REQUIRE(out.rows == 4);
+}
+
+TEST_CASE("drawSeam paints only the seam pixels") {
+    const cv::Mat img(3, 4, CV_8UC3, cv::Scalar(10, 20, 30));
+    const cv::Mat out = sc::drawSeam(img, {0, 1, 2});
+    REQUIRE(out.at<cv::Vec3b>(0, 0) == cv::Vec3b(0, 0, 255));
+    REQUIRE(out.at<cv::Vec3b>(1, 1) == cv::Vec3b(0, 0, 255));
+    REQUIRE(out.at<cv::Vec3b>(2, 2) == cv::Vec3b(0, 0, 255));
+    REQUIRE(out.at<cv::Vec3b>(0, 1) == cv::Vec3b(10, 20, 30));
+    REQUIRE(img.at<cv::Vec3b>(0, 0) == cv::Vec3b(10, 20, 30)); // input untouched
+}
+
+TEST_CASE("sideBySide fits both images on one canvas") {
+    const cv::Mat left(150, 200, CV_8UC3, cv::Scalar(255, 0, 0));
+    const cv::Mat right(120, 150, CV_8UC3, cv::Scalar(0, 255, 0));
+    const cv::Mat canvas = sc::sideBySide(left, "left", right, "right");
+    REQUIRE(canvas.type() == CV_8UC3);
+    REQUIRE(canvas.cols > left.cols + right.cols);
+    REQUIRE(canvas.rows > left.rows);
+}
+
+TEST_CASE("sideBySide shrinks large images to fit on screen") {
+    const cv::Mat left(968, 1428, CV_8UC3, cv::Scalar(255, 0, 0));
+    const cv::Mat right(726, 1071, CV_8UC3, cv::Scalar(0, 255, 0));
+    const cv::Mat canvas = sc::sideBySide(left, "left", right, "right");
+    REQUIRE(canvas.cols <= 1300);
+    REQUIRE(canvas.rows <= 700);
 }
 
 // The tests below are hidden (the "[.]" tag) because the algorithms are

@@ -13,3 +13,8 @@ declaration of how AI was used and the main prompts.
 | 2026-11-16 | Setup | Claude | "Add a clean and a rebuild batch file" | `clean.bat`, `rebuild.bat` |
 | 2026-11-16 | Setup | Claude | Pasted the vcpkg "requires a manifest with a specified baseline" error and asked what it means | `builtin-baseline` in `vcpkg.json`; `run.bat` prefers Visual Studio's own CMake |
 | 2026-11-16 | Setup | Claude | "The first run is very slow, what are my options to speed it up?" | Trimmed OpenCV feature list in `vcpkg.json` |
+| 2026-11-16 | Setup | Claude | "Make it possible to display the image in an output visual before the work is split" | `visualize.hpp/.cpp` (side-by-side view, seam overlay, window), preview in `main.cpp`, two tests |
+| 2026-11-16 | Setup | Claude | Pasted the "could not read image" error and asked for the program to take an input to choose the image | Interactive prompts in `main.cpp`, `paths.hpp/.cpp` working-directory fix |
+| 2026-11-16 | Setup | Claude | Screenshot of the preview window being too big for the screen; asked to make it smaller | Fit-to-screen scaling in `sideBySide`, one test |
+| 2026-11-16 | Setup | Claude | "Repoint the benchmark and README to the new image and add the small sample back" | Updated launch arguments and README; restored `sample.png` |
+| 2026-11-16 | Planning | Claude | "Draft a to-do list for this assignment and put it in a docs folder" | `docs/TODO.md` |

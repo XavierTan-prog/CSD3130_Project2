@@ -8,8 +8,10 @@
 #include <opencv2/imgcodecs.hpp>
 
 #include "seam_carving/carve.hpp"
+#include "seam_carving/paths.hpp"
 
 int main(int argc, char** argv) {
+    sc::useProjectDir();
     if (argc < 3) {
         std::cerr << "Usage: benchmark <input> <seams-to-remove>\n";
         return 1;

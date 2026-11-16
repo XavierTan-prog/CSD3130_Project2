@@ -16,6 +16,8 @@ add_library(seamlib
     src/greedy.cpp
     src/graph_cut.cpp
     src/carve.cpp
+    src/visualize.cpp
+    src/paths.cpp
     # Headers are listed so they show up in the Visual Studio solution.
     include/seam_carving/energy.hpp
     include/seam_carving/seam.hpp
@@ -23,8 +25,12 @@ add_library(seamlib
     include/seam_carving/greedy.hpp
     include/seam_carving/graph_cut.hpp
     include/seam_carving/carve.hpp
+    include/seam_carving/visualize.hpp
+    include/seam_carving/paths.hpp
 )
 target_include_directories(seamlib PUBLIC include)
+# Lets the programs find images/ even when started from another folder.
+target_compile_definitions(seamlib PRIVATE SC_PROJECT_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(seamlib PUBLIC ${OpenCV_LIBS})
 if(MSVC)
     target_compile_options(seamlib PRIVATE /W4)
@@ -41,18 +47,15 @@ add_executable(benchmark bench/benchmark.cpp)
 target_link_libraries(benchmark PRIVATE seamlib)
 
 # Visual Studio launch settings. run.bat only opens the solution; running
-# is done with F5. Change the arguments below (then build once, so the
-# solution regenerates) to resize a different image or use another method.
-#   seam_carve <input> <output> <width> <height> [dp|greedy|graphcut]
-#   benchmark  <input> <seams-to-remove>
-# The working directory is the repo root, so relative paths work.
+# is done with F5.
+#   seam_carve  with no arguments asks which image, size and method to use.
+#   benchmark   <input> <seams-to-remove>
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT seam_carve)
 set_target_properties(seam_carve PROPERTIES
-    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    VS_DEBUGGER_COMMAND_ARGUMENTS "images/input/sample.png images/output/sample_dp.png 150 120 dp")
+    VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 set_target_properties(benchmark PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    VS_DEBUGGER_COMMAND_ARGUMENTS "images/input/sample.png 10")
+    VS_DEBUGGER_COMMAND_ARGUMENTS "images/input/Broadway_tower_edit.jpg 10")
 
 # Unit tests.
 enable_testing()
