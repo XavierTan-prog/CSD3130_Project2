@@ -2,6 +2,7 @@
 
 #include "seam_carving/carve.hpp"
 #include "seam_carving/dp.hpp"
+#include "seam_carving/energy.hpp"
 #include "seam_carving/graph_cut.hpp"
 #include "seam_carving/greedy.hpp"
 #include "seam_carving/seam.hpp"
@@ -17,7 +18,91 @@ cv::Mat knownEnergy() {
                                       5, 2, 4, 2, 3);
 }
 
+// Deterministic BGR image with varied gradients in both directions.
+cv::Mat patternImage() {
+    cv::Mat img(7, 9, CV_8UC3);
+    for (int r = 0; r < img.rows; ++r) {
+        for (int c = 0; c < img.cols; ++c) {
+            img.at<cv::Vec3b>(r, c) = cv::Vec3b(static_cast<uchar>((r * 37 + c * 11) % 256),
+                                                static_cast<uchar>((r * c * 13) % 256),
+                                                static_cast<uchar>((c * 29 + 5) % 256));
+        }
+    }
+    return img;
+}
+
 } // namespace
+
+TEST_CASE("computeEnergy of a constant image is zero everywhere") {
+    const cv::Mat img(5, 7, CV_8UC3, cv::Scalar(10, 20, 30));
+    const cv::Mat energy = sc::computeEnergy(img);
+    REQUIRE(energy.type() == CV_64FC1);
+    REQUIRE(energy.rows == img.rows);
+    REQUIRE(energy.cols == img.cols);
+    double minVal = 0.0, maxVal = 0.0;
+    cv::minMaxLoc(energy, &minVal, &maxVal);
+    REQUIRE(minVal >= -1e-9);
+    REQUIRE(maxVal <= 1e-9);
+}
+
+TEST_CASE("computeEnergy is high at a vertical edge and zero in flat areas") {
+    // Columns 0-3 black, columns 4-7 white: the edge is between 3 and 4.
+    cv::Mat img(6, 8, CV_8UC3, cv::Scalar(0, 0, 0));
+    img.colRange(4, 8).setTo(cv::Scalar(255, 255, 255));
+    const cv::Mat energy = sc::computeEnergy(img);
+
+    double minVal = 0.0;
+    cv::minMaxLoc(energy, &minVal);
+    REQUIRE(minVal >= 0.0);
+    for (int r = 0; r < energy.rows; ++r) {
+        REQUIRE(energy.at<double>(r, 3) > 0.0);
+        REQUIRE(energy.at<double>(r, 4) > 0.0);
+        REQUIRE(energy.at<double>(r, 0) == 0.0); // flat area, far from the edge
+        REQUIRE(energy.at<double>(r, 7) == 0.0);
+        REQUIRE(energy.at<double>(r, 3) > energy.at<double>(r, 0));
+    }
+}
+
+TEST_CASE("computeEnergy L1 and L2 return same-size CV_64FC1 maps with L1 >= L2") {
+    const cv::Mat img = patternImage();
+    const cv::Mat l1 = sc::computeEnergy(img, sc::EnergyOperator::SobelL1);
+    const cv::Mat l2 = sc::computeEnergy(img, sc::EnergyOperator::SobelL2);
+    for (const cv::Mat* m : {&l1, &l2}) {
+        REQUIRE(m->type() == CV_64FC1);
+        REQUIRE(m->rows == img.rows);
+        REQUIRE(m->cols == img.cols);
+    }
+    for (int r = 0; r < img.rows; ++r) {
+        for (int c = 0; c < img.cols; ++c) {
+            REQUIRE(l2.at<double>(r, c) >= 0.0);
+            REQUIRE(l1.at<double>(r, c) + 1e-9 >= l2.at<double>(r, c));
+        }
+    }
+}
+
+TEST_CASE("computeEnergy defaults to the Sobel L1 operator") {
+    const cv::Mat img = patternImage();
+    const cv::Mat byDefault = sc::computeEnergy(img);
+    const cv::Mat l1 = sc::computeEnergy(img, sc::EnergyOperator::SobelL1);
+    REQUIRE(cv::norm(byDefault, l1, cv::NORM_INF) == 0.0);
+}
+
+TEST_CASE("computeEnergy does not modify its input") {
+    const cv::Mat img = patternImage();
+    const cv::Mat before = img.clone();
+    sc::computeEnergy(img, sc::EnergyOperator::SobelL1);
+    sc::computeEnergy(img, sc::EnergyOperator::SobelL2);
+    REQUIRE(cv::norm(img, before, cv::NORM_INF) == 0.0);
+}
+
+TEST_CASE("computeEnergy rejects invalid input") {
+    REQUIRE_THROWS_AS(sc::computeEnergy(cv::Mat()), cv::Exception);
+    REQUIRE_THROWS_AS(sc::computeEnergy(cv::Mat(4, 4, CV_8UC1, cv::Scalar(0))), cv::Exception);
+    REQUIRE_THROWS_AS(sc::computeEnergy(cv::Mat(4, 4, CV_64FC3, cv::Scalar(0, 0, 0))),
+                      cv::Exception);
+    const cv::Mat img(4, 4, CV_8UC3, cv::Scalar(1, 2, 3));
+    REQUIRE_THROWS_AS(sc::computeEnergy(img, static_cast<sc::EnergyOperator>(99)), cv::Exception);
+}
 
 TEST_CASE("isValidSeam accepts connected seams only") {
     REQUIRE(sc::isValidSeam({0, 1, 1}, 3, 5));
