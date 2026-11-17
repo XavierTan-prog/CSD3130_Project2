@@ -24,6 +24,6 @@ enum class EnergyOperator {
  * @throws cv::Exception if @p img is empty or not CV_8UC3, or if @p op is not
  *         a valid EnergyOperator value.
  */
-cv::Mat computeEnergy(const cv::Mat& img, EnergyOperator op = EnergyOperator::SobelL2);
+cv::Mat computeEnergy(const cv::Mat& img, EnergyOperator op = EnergyOperator::SobelL1);
 
 } // namespace sc
