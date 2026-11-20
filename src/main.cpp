@@ -2,17 +2,19 @@
 //
 // With no arguments it asks which image to use, the target size and the
 // method. With arguments it runs straight away:
-//   seam_carve <input> <output> <width> <height> [dp|greedy|graphcut] [--no-show]
+//   seam_carve <input> <output> <width> <height> [dp|greedy|graphcut] [--no-show] [--steps[=MS]]
 #include <algorithm>
 #include <cctype>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
 
+#include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 
 #include "seam_carving/carve.hpp"
@@ -131,9 +133,38 @@ fs::path askImage(cv::Mat& img) {
     }
 }
 
+bool askYesNo(const std::string& prompt, bool fallback) {
+    for (;;) {
+        std::string answer = ask(prompt + (fallback ? " (y/n) [y]: " : " (y/n) [n]: "));
+        std::transform(answer.begin(), answer.end(), answer.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (answer.empty()) return fallback;
+        if (answer == "y" || answer == "yes") return true;
+        if (answer == "n" || answer == "no") return false;
+        std::cout << "  Please enter y or n.\n";
+    }
+}
+
+// `stepDelayMs` < 0: no step-by-step view. Otherwise every seam is shown
+// for that many milliseconds before it is removed.
 int resizeAndShow(const cv::Mat& img, const fs::path& outputPath, int width, int height,
-                  sc::Method method, bool show) {
-    const cv::Mat result = sc::carve(img, width, height, method);
+                  sc::Method method, bool show, int stepDelayMs) {
+    cv::Mat result;
+    if (show && stepDelayMs >= 0) {
+        const int totalSeams = (img.cols - width) + (img.rows - height);
+        std::cout << "Showing each seam before it is removed. In the window: Space pauses, "
+                     "N steps while paused, Esc skips to the result.\n";
+        sc::SeamStepViewer viewer("Seam carving: step by step", sc::methodName(method),
+                                  totalSeams, stepDelayMs);
+        result = sc::carve(img, width, height, method, std::ref(viewer));
+        cv::destroyAllWindows();
+        if (viewer.stepsShown() < totalSeams) {
+            std::cout << "Animation skipped after " << viewer.stepsShown() << " of "
+                      << totalSeams << " seams; the rest were removed without showing.\n";
+        }
+    } else {
+        result = sc::carve(img, width, height, method);
+    }
 
     std::error_code ec;
     if (outputPath.has_parent_path()) fs::create_directories(outputPath.parent_path(), ec);
@@ -163,12 +194,18 @@ int runInteractive(bool show) {
     const int height = askInt("Target height", 1, img.rows, std::max(1, img.rows * 3 / 4));
     const sc::Method method = askMethod();
 
+    int stepDelayMs = -1;
+    if (show && (width < img.cols || height < img.rows) &&
+        askYesNo("Show each seam as it is removed?", false)) {
+        stepDelayMs = askInt("Milliseconds per seam", 1, 2000, 30);
+    }
+
     const fs::path outputPath = fs::path(kOutputDir) /
         (inputPath.stem().string() + "_" + sc::methodName(method) + ".png");
-    return resizeAndShow(img, outputPath, width, height, method, show);
+    return resizeAndShow(img, outputPath, width, height, method, show, stepDelayMs);
 }
 
-int runWithArguments(const std::vector<std::string>& args, bool show) {
+int runWithArguments(const std::vector<std::string>& args, bool show, int stepDelayMs) {
     const std::string inputPath = args[0];
     const std::string outputPath = args[1];
     int width = 0;
@@ -188,7 +225,7 @@ int runWithArguments(const std::vector<std::string>& args, bool show) {
         std::cerr << "Target size must be between 1x1 and " << sizeText(img) << "\n";
         return 1;
     }
-    return resizeAndShow(img, outputPath, width, height, method, show);
+    return resizeAndShow(img, outputPath, width, height, method, show, stepDelayMs);
 }
 
 } // namespace
@@ -196,13 +233,26 @@ int runWithArguments(const std::vector<std::string>& args, bool show) {
 int main(int argc, char** argv) {
     sc::useProjectDir();
 
-    // "--no-show" skips the preview window; everything else is positional.
+    // "--no-show" skips the preview window; "--steps" shows every seam before
+    // it is removed ("--steps=MS" sets the milliseconds per seam, default 30).
+    // Everything else is positional.
     bool show = true;
+    int stepDelayMs = -1;
     std::vector<std::string> args;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
-        if (arg == "--no-show") show = false;
-        else args.push_back(arg);
+        if (arg == "--no-show") {
+            show = false;
+        } else if (arg == "--steps") {
+            stepDelayMs = 30;
+        } else if (arg.rfind("--steps=", 0) == 0) {
+            if (!parseInt(arg.substr(8), stepDelayMs) || stepDelayMs < 1) {
+                std::cerr << "--steps=MS needs a whole number of milliseconds, at least 1.\n";
+                return 1;
+            }
+        } else {
+            args.push_back(arg);
+        }
     }
 
     try {
@@ -210,10 +260,10 @@ int main(int argc, char** argv) {
         if (args.size() < 4) {
             std::cerr << "Usage: seam_carve                      (asks for everything)\n"
                          "       seam_carve <input> <output> <width> <height> "
-                         "[dp|greedy|graphcut] [--no-show]\n";
+                         "[dp|greedy|graphcut] [--no-show] [--steps[=MS]]\n";
             return 1;
         }
-        return runWithArguments(args, show);
+        return runWithArguments(args, show, stepDelayMs);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         return 1;

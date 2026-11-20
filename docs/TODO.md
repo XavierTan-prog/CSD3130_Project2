@@ -15,6 +15,7 @@ in brackets refer to the assignment brief.
 | Mon 16 Nov | Setup finished, tasks assigned, energy map merged |
 | Tue 17 Nov | DP and greedy working; graph cut started |
 | Wed 18 Nov | Graph cut working; benchmark and comparison images produced; bonus features |
+| Fri 20 Nov (actual) | DP, greedy and graph cut done, all 31 tests pass. Remaining: evaluation figures, report, video, submission |
 | Thu 19 Nov | Report written; video recorded |
 | Fri 20 Nov | Final checks; submit well before 23:59 |
 | Sat 21 - Mon 23 Nov | Quiz preparation |
@@ -81,16 +82,17 @@ below on their own machine.
 
 | Done | Task | File | Owner |
 | --- | --- | --- | --- |
-| [ ] | Energy map, e.g. Sobel gradient magnitude (1a). **Do first: everything depends on it.** | `src/energy.cpp` | |
-| [ ] | DP minimum seam: fill the table, backtrack (1b) | `src/dp.cpp` | |
-| [ ] | Greedy seam: row-by-row local choice (3) | `src/greedy.cpp` | |
-| [x] | Graph-cut seam: build the graph, max-flow, read the cut (4) | `src/graph_cut.cpp` | chuuniby |
+| [x] | Energy map, e.g. Sobel gradient magnitude (1a). **Do first: everything depends on it.** | `src/energy.cpp` | Abhishek |
+| [x] | DP minimum seam: fill the table, backtrack (1b) | `src/dp.cpp` | Nelson |
+| [x] | Greedy seam: row-by-row local choice (3) | `src/greedy.cpp` | Nelson |
+| [x] | Graph-cut seam: build the graph, max-flow (Dinic), read the cut (4) | `src/graph_cut.cpp` | chuuniby |
 
-- [ ] Vertical and horizontal seams both work for all three methods (1). The transpose handling is already in `src/carve.cpp`; check the results.
-- [ ] Remove the `[.]` tag from each hidden test in `tests/test_seams.cpp` as its method is finished
-- [ ] Add tests for edge cases: one-column image, one-row image, ties in energy
-- [ ] Check that graph cut and DP give the same seam cost on small images
-- [ ] No library content-aware resize function is used anywhere
+- [x] Vertical and horizontal seams both work for all three methods (1). Horizontal seams use the transpose in `src/carve.cpp`; tested for DP and greedy, and checked on the tower photo (1428x968 to 1428x868 with DP).
+- [x] Remove the `[.]` tag from each hidden test in `tests/test_seams.cpp` as its method is finished (no hidden tests left)
+- [x] Add tests for edge cases: one-column image, one-row image, ties in energy (also: greedy trap case, DP vs brute force, 50 random maps, horizontal seams, last-column seam for graph cut)
+- [x] Check that graph cut and DP give the same seam cost on small images (tested on 3 maps)
+- [x] No library content-aware resize function is used anywhere
+- [x] `benchmark` launch argument switched to `images/input/sample.png 10` (graph cut is too slow for the tower photo)
 
 ## 3. Theory questions (2)
 
@@ -106,6 +108,7 @@ below on their own machine.
 - [ ] Seams compared: overlay the seams each method picks on the same image (`drawSeam` in `src/visualize.cpp`)
 - [ ] Visual quality compared: DP vs greedy vs graph cut outputs at the same target size, plus plain cropping and scaling for reference
 - [ ] Running time compared with `benchmark` (Release build), across a few image sizes
+  - First result, `sample.png` (200x150), 10 seams: greedy 6 ms, DP 13 ms, graph cut 1,791 ms. Still needed: more sizes (e.g. 100x75, 400x300), and DP/greedy alone on the tower photo.
 - [ ] Time and space complexity of each method worked out (5b)
 - [ ] Improvements investigated (5d):
   - [ ] Do we need the whole DP table? (e.g. keep two rows plus backtracking information)
@@ -116,7 +119,7 @@ below on their own machine.
 
 | Done | Task | Owner |
 | --- | --- | --- |
-| [ ] | Step-by-step visualisation showing every seam as it is removed | |
+| [x] | Step-by-step visualisation showing every seam as it is removed (`seam_carve`: answer "y" to "Show each seam", or `--steps`; Space pause, N next, Esc skip) | Nelson |
 | [ ] | Interactive resizing: user changes the image size live (e.g. trackbars) | |
 | [ ] | CI/CD: workflow builds and tests on every push (started; keep it green) | |
 
