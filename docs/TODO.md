@@ -83,9 +83,9 @@ below on their own machine.
 | Done | Task | File | Owner |
 | --- | --- | --- | --- |
 | [x] | Energy map, e.g. Sobel gradient magnitude (1a). **Do first: everything depends on it.** | `src/energy.cpp` | Abhishek |
-| [x] | DP minimum seam: fill the table, backtrack (1b) | `src/dp.cpp` | |
-| [x] | Greedy seam: row-by-row local choice (3) | `src/greedy.cpp` | |
-| [x] | Graph-cut seam: build the graph, max-flow, read the cut (4) | `src/graph_cut.cpp` | |
+| [x] | DP minimum seam: fill the table, backtrack (1b) | `src/dp.cpp` | Nelson |
+| [x] | Greedy seam: row-by-row local choice (3) | `src/greedy.cpp` | Nelson |
+| [x] | Graph-cut seam: build the graph, max-flow, read the cut (4) | `src/graph_cut.cpp` | Nelson |
 
 - [x] Vertical and horizontal seams both work for all three methods (1). Horizontal seams use the transpose in `src/carve.cpp`; tested for DP and greedy, and checked on the tower photo (1428x968 to 1428x868 with DP).
 - [x] Remove the `[.]` tag from each hidden test in `tests/test_seams.cpp` as its method is finished (no hidden tests left)
