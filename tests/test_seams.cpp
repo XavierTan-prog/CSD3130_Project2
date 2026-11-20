@@ -1,5 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <cstdlib>
+#include <limits>
+#include <random>
+
 #include "seam_carving/carve.hpp"
 #include "seam_carving/dp.hpp"
 #include "seam_carving/energy.hpp"
@@ -29,6 +34,20 @@ cv::Mat patternImage() {
         }
     }
     return img;
+}
+
+// Exhaustively enumerate the legal continuations of each path on small maps.
+double bruteForceSeamCost(const cv::Mat& energy, int row = 0, int previousCol = -1,
+                         double cost = 0.0) {
+    if (row == energy.rows) return cost;
+
+    double best = std::numeric_limits<double>::infinity();
+    for (int col = 0; col < energy.cols; ++col) {
+        if (row > 0 && std::abs(col - previousCol) > 1) continue;
+        best = std::min(best, bruteForceSeamCost(energy, row + 1, col,
+                                                cost + energy.at<double>(row, col)));
+    }
+    return best;
 }
 
 } // namespace
@@ -169,20 +188,115 @@ TEST_CASE("sideBySide shrinks large images to fit on screen") {
     REQUIRE(canvas.rows <= 700);
 }
 
-// The tests below are hidden (the "[.]" tag) because the algorithms are
-// still placeholders. Delete "[.]" from a test once you implement that
-// method, and it will run in CI with the rest.
+TEST_CASE("Graph cut finds the known minimum-energy seam", "[graphcut]") {
+    const cv::Mat energy = knownEnergy();
+    const sc::Seam seam = sc::findSeamGraphCut(energy);
+    REQUIRE(seam == sc::Seam{0, 1, 1});
+    REQUIRE(sc::seamCost(energy, seam) == 5.0);
+}
+
+TEST_CASE("Graph cut keeps adjacent rows connected", "[graphcut]") {
+    // The two zero-energy pixels are too far apart to share a seam.
+    const cv::Mat energy = (cv::Mat_<double>(2, 4) << 0, 7, 3, 7,
+                                                    7, 7, 7, 0);
+    REQUIRE(sc::findSeamGraphCut(energy) == sc::Seam{2, 3});
+
+    cv::Mat flipped;
+    cv::flip(energy, flipped, 0);
+    REQUIRE(sc::findSeamGraphCut(flipped) == sc::Seam{3, 2});
+}
+
+TEST_CASE("Graph cut can select either boundary of a two-column map", "[graphcut]") {
+    const cv::Mat energy = (cv::Mat_<double>(3, 2) << 9, 1,
+                                                    8, 2,
+                                                    7, 3);
+    REQUIRE(sc::findSeamGraphCut(energy) == sc::Seam{1, 1, 1});
+
+    cv::Mat flipped;
+    cv::flip(energy, flipped, 1);
+    REQUIRE(sc::findSeamGraphCut(flipped) == sc::Seam{0, 0, 0});
+}
+
+TEST_CASE("Graph cut handles one-row and one-column maps", "[graphcut]") {
+    SECTION("One row with small fractional energies") {
+        const cv::Mat energy = (cv::Mat_<double>(1, 3) << 8e-20, 4e-20, 1e-20);
+        REQUIRE(sc::findSeamGraphCut(energy) == sc::Seam{2});
+    }
+    SECTION("One column") {
+        const cv::Mat energy = (cv::Mat_<double>(3, 1) << 9, 0, 2);
+        REQUIRE(sc::findSeamGraphCut(energy) == sc::Seam{0, 0, 0});
+    }
+    SECTION("One pixel with the largest finite energy") {
+        const cv::Mat energy(1, 1, CV_64FC1, cv::Scalar(std::numeric_limits<double>::max()));
+        REQUIRE(sc::findSeamGraphCut(energy) == sc::Seam{0});
+    }
+}
+
+TEST_CASE("Graph cut finds a valid optimum on tied and zero-cost maps", "[graphcut]") {
+    for (double value : {2.0, 0.0}) {
+        const cv::Mat energy(3, 4, CV_64FC1, cv::Scalar(value));
+        const sc::Seam seam = sc::findSeamGraphCut(energy);
+        REQUIRE(sc::isValidSeam(seam, energy.rows, energy.cols));
+        REQUIRE(sc::seamCost(energy, seam) == energy.rows * value);
+    }
+}
+
+TEST_CASE("Graph cut matches exhaustive seam search on small maps", "[graphcut]") {
+    std::mt19937 rng(3130);
+    std::uniform_int_distribution<int> energyValue(0, 12);
+    for (int height = 1; height <= 5; ++height) {
+        for (int width = 1; width <= 5; ++width) {
+            for (int trial = 0; trial < 20; ++trial) {
+                CAPTURE(height, width, trial);
+                cv::Mat_<double> energy(height, width);
+                for (double& cost : energy) cost = energyValue(rng) * 0.25;
+
+                const sc::Seam seam = sc::findSeamGraphCut(energy);
+                REQUIRE(sc::isValidSeam(seam, height, width));
+                REQUIRE(sc::seamCost(energy, seam) == bruteForceSeamCost(energy));
+            }
+        }
+    }
+}
+
+TEST_CASE("Graph cut rejects invalid energy maps", "[graphcut]") {
+    REQUIRE_THROWS_AS(sc::findSeamGraphCut(cv::Mat()), cv::Exception);
+    REQUIRE_THROWS_AS(sc::findSeamGraphCut(cv::Mat(2, 2, CV_8UC1, cv::Scalar(1))), cv::Exception);
+    for (double invalid : {-1.0, std::numeric_limits<double>::infinity(),
+                           std::numeric_limits<double>::quiet_NaN()}) {
+        const cv::Mat energy(2, 2, CV_64FC1, cv::Scalar(invalid));
+        REQUIRE_THROWS_AS(sc::findSeamGraphCut(energy), cv::Exception);
+    }
+}
+
+TEST_CASE("Carve removes graph-cut seams in both directions", "[graphcut]") {
+    // The rightmost column is the only zero-cost vertical seam with Sobel L1.
+    cv::Mat img(3, 3, CV_8UC3, cv::Scalar::all(50));
+    img.col(2).setTo(cv::Scalar::all(200));
+    for (int row = 0; row < img.rows; ++row) {
+        const auto grey = static_cast<uchar>(10 * (row + 1));
+        img.at<cv::Vec3b>(row, 0) = cv::Vec3b(grey, grey, grey);
+    }
+
+    const cv::Mat expectedVertical = img.colRange(0, 2);
+    const cv::Mat vertical = sc::carve(img, 2, img.rows, sc::Method::GraphCut);
+    REQUIRE(vertical.size() == expectedVertical.size());
+    REQUIRE(cv::norm(vertical, expectedVertical, cv::NORM_INF) == 0.0);
+
+    const cv::Mat transposed = img.t();
+    const cv::Mat expectedHorizontal = expectedVertical.t();
+    const cv::Mat horizontal = sc::carve(transposed, transposed.cols, 2, sc::Method::GraphCut);
+    REQUIRE(horizontal.size() == expectedHorizontal.size());
+    REQUIRE(cv::norm(horizontal, expectedHorizontal, cv::NORM_INF) == 0.0);
+}
+
+// DP and greedy.
 
 TEST_CASE("DP finds the optimal seam", "[dp]") {
     const cv::Mat energy = knownEnergy();
     const sc::Seam seam = sc::findSeamDP(energy);
     REQUIRE(seam == sc::Seam{0, 1, 1});
     REQUIRE(sc::seamCost(energy, seam) == 5.0);
-}
-
-TEST_CASE("graph cut matches the DP optimum", "[graphcut]") {
-    const cv::Mat energy = knownEnergy();
-    REQUIRE(sc::seamCost(energy, sc::findSeamGraphCut(energy)) == 5.0);
 }
 
 TEST_CASE("greedy never beats DP", "[greedy]") {
@@ -273,18 +387,6 @@ TEST_CASE("graph cut can put the seam in the last column", "[graphcut]") {
                                                       9, 9, 1,
                                                       9, 9, 1);
     REQUIRE(sc::findSeamGraphCut(energy) == sc::Seam{2, 2, 2});
-}
-
-TEST_CASE("graph cut handles one-column and one-row images", "[graphcut]") {
-    const cv::Mat column = (cv::Mat_<double>(4, 1) << 3, 1, 4, 1);
-    REQUIRE(sc::findSeamGraphCut(column) == sc::Seam{0, 0, 0, 0});
-    const cv::Mat row = (cv::Mat_<double>(1, 5) << 4, 2, 7, 1, 3);
-    REQUIRE(sc::findSeamGraphCut(row) == sc::Seam{3});
-}
-
-TEST_CASE("graph cut rejects invalid energy maps", "[graphcut]") {
-    REQUIRE_THROWS_AS(sc::findSeamGraphCut(cv::Mat()), cv::Exception);
-    REQUIRE_THROWS_AS(sc::findSeamGraphCut(cv::Mat(3, 3, CV_8UC1, cv::Scalar(0))), cv::Exception);
 }
 
 TEST_CASE("DP and greedy reject invalid energy maps", "[dp][greedy]") {

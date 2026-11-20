@@ -63,10 +63,11 @@ ctest --test-dir build -C Release --output-on-failure
 # seam_carve <input> <output> <width> <height> [dp|greedy|graphcut] [--no-show] [--steps[=MS]]
 # (--no-show skips the preview window; --steps shows every seam, MS milliseconds each, default 30)
 build\Release\seam_carve.exe images\input\Broadway_tower_edit.jpg images\output\Broadway_tower_edit_dp.png 1071 726 dp
+build\Release\seam_carve.exe images\input\sample.png images\output\sample_graphcut_190x145.png 190 145 graphcut --no-show
 build\Release\seam_carve.exe images\input\sample.png images\output\sample_dp.png 150 120 dp --steps=100
 
 # benchmark <input> <seams-to-remove>
-build\Release\benchmark.exe images\input\Broadway_tower_edit.jpg 10
+build\Release\benchmark.exe images\input\sample.png 10
 ```
 
 ## Test images

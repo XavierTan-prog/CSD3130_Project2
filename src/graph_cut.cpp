@@ -1,183 +1,212 @@
 #include "seam_carving/graph_cut.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <cstddef>
 #include <limits>
-#include <queue>
 #include <vector>
 
 namespace sc {
-
 namespace {
 
-constexpr double kInf = std::numeric_limits<double>::infinity();
+constexpr double kUnboundedCapacity = std::numeric_limits<double>::infinity();
 
-// Residual capacities below this are treated as zero (guards against
-// floating-point leftovers after subtracting flows).
-constexpr double kEps = 1e-9;
+struct FlowEdge {
+    int to;
+    int reverseIndex;
+    double residual;
+};
 
-// Directed graph stored as an edge list plus per-node adjacency lists.
-// Every edge is added together with its reverse edge (capacity 0), so the
-// residual graph is just the same arrays with `cap` updated in place.
-struct FlowGraph {
-    struct Edge {
-        int to;
-        double cap; // residual capacity
-    };
-
-    std::vector<Edge> edges;            // edge e and its reverse are e and e ^ 1
-    std::vector<std::vector<int>> adj;  // edge ids leaving each node
-
-    explicit FlowGraph(int nodes) : adj(static_cast<size_t>(nodes)) {}
-
-    void addEdge(int from, int to, double cap) {
-        adj[static_cast<size_t>(from)].push_back(static_cast<int>(edges.size()));
-        edges.push_back({to, cap});
-        adj[static_cast<size_t>(to)].push_back(static_cast<int>(edges.size()));
-        edges.push_back({from, 0.0});
+class FlowNetwork {
+public:
+    FlowNetwork(int width, int height) : edges_(width * height + 2) {
+        for (int row = 0; row < height; ++row) {
+            const int adjacentRows = (row > 0) + (row + 1 < height);
+            for (int col = 0; col < width; ++col) {
+                const int adjacentCols = (col > 0) + (col + 1 < width);
+                // Two energy/terminal entries, plus a backward edge and the
+                // diagonal constraints (or their reverse entries) on each side.
+                edges_[row * width + col].reserve(2 + adjacentCols * (1 + adjacentRows));
+            }
+        }
+        const int source = width * height;
+        edges_[source].reserve(height);
+        edges_[source + 1].reserve(height);
     }
 
-    // Edmonds-Karp: repeatedly find the shortest (fewest edges) path from
-    // source to sink with BFS in the residual graph and push the bottleneck
-    // capacity along it, until no such path exists.
-    void maxFlow(int source, int sink) {
-        const size_t n = adj.size();
-        std::vector<int> parentEdge(n);
-        std::queue<int> queue;
-        for (;;) {
-            // BFS from the source; parentEdge[v] is the edge used to reach v.
-            std::fill(parentEdge.begin(), parentEdge.end(), -1);
-            parentEdge[static_cast<size_t>(source)] = -2;
-            queue.push(source);
-            while (!queue.empty() && parentEdge[static_cast<size_t>(sink)] == -1) {
-                const int u = queue.front();
-                queue.pop();
-                for (int id : adj[static_cast<size_t>(u)]) {
-                    const Edge& e = edges[static_cast<size_t>(id)];
-                    if (e.cap > kEps && parentEdge[static_cast<size_t>(e.to)] == -1) {
-                        parentEdge[static_cast<size_t>(e.to)] = id;
-                        queue.push(e.to);
-                    }
-                }
+    void addEdge(int from, int to, double capacity) {
+        const int forwardIndex = static_cast<int>(edges_[from].size());
+        const int reverseIndex = static_cast<int>(edges_[to].size());
+        edges_[from].push_back({to, reverseIndex, capacity});
+        edges_[to].push_back({from, forwardIndex, 0.0});
+    }
+
+    std::vector<bool> minCutSourceSide(int source, int sink) {
+        std::vector<int> level(edges_.size());
+        std::vector<int> nextEdge(edges_.size());
+        std::vector<int> queue;
+        std::vector<int> path;
+        queue.reserve(edges_.size());
+        path.reserve(edges_.size());
+
+        // Dinic sends a blocking flow through the BFS levels before rebuilding them.
+        while (buildLevels(source, sink, level, queue)) {
+            sendBlockingFlow(source, sink, level, nextEdge, path);
+        }
+
+        // The sink is unreachable. Find the source side of the final cut.
+        std::vector<bool> sourceSide(edges_.size());
+        queue.clear();
+        queue.push_back(source);
+        sourceSide[source] = true;
+        for (std::size_t head = 0; head < queue.size(); ++head) {
+            for (const FlowEdge& edge : edges_[queue[head]]) {
+                if (edge.residual <= 0.0 || sourceSide[edge.to]) continue;
+                sourceSide[edge.to] = true;
+                queue.push_back(edge.to);
             }
-            queue = {};
-            if (parentEdge[static_cast<size_t>(sink)] == -1) {
-                return; // no augmenting path left: the flow is maximum
+        }
+        return sourceSide;
+    }
+
+private:
+    bool buildLevels(int source, int sink, std::vector<int>& level,
+                     std::vector<int>& queue) const {
+        std::fill(level.begin(), level.end(), -1);
+        level[sink] = 0;
+        queue.clear();
+        queue.push_back(sink);
+
+        // Label distances to the sink by following incoming residual edges.
+        for (std::size_t head = 0; head < queue.size(); ++head) {
+            const int from = queue[head];
+            for (const FlowEdge& edge : edges_[from]) {
+                if (level[edge.to] != -1) continue;
+                const FlowEdge& incoming = edges_[edge.to][edge.reverseIndex];
+                if (incoming.residual <= 0.0) continue;
+                level[edge.to] = level[from] + 1;
+                // All vertices closer to the sink than the source have a level.
+                if (edge.to == source) return true;
+                queue.push_back(edge.to);
+            }
+        }
+        return false;
+    }
+
+    void sendBlockingFlow(int source, int sink, const std::vector<int>& level,
+                          std::vector<int>& nextEdge, std::vector<int>& path) {
+        std::fill(nextEdge.begin(), nextEdge.end(), 0);
+        path.clear();
+        path.push_back(source);
+
+        // Iterate over the level graph with an explicit stack for deep paths.
+        while (!path.empty()) {
+            const int from = path.back();
+            if (from == sink) {
+                path.resize(augmentPath(path, nextEdge));
+                continue;
             }
 
-            // Bottleneck = smallest residual capacity on the path.
-            double bottleneck = kInf;
-            for (int v = sink; v != source;) {
-                const int id = parentEdge[static_cast<size_t>(v)];
-                bottleneck = std::min(bottleneck, edges[static_cast<size_t>(id)].cap);
-                v = edges[static_cast<size_t>(id ^ 1)].to;
+            int& next = nextEdge[from];
+            const auto& outgoing = edges_[from];
+            const int edgeCount = static_cast<int>(outgoing.size());
+            const int nextLevel = level[from] - 1;
+            for (; next < edgeCount; ++next) {
+                const FlowEdge& edge = outgoing[next];
+                if (edge.residual > 0.0 && level[edge.to] == nextLevel) break;
             }
 
-            // Push it: forward residuals shrink, reverse residuals grow.
-            for (int v = sink; v != source;) {
-                const int id = parentEdge[static_cast<size_t>(v)];
-                edges[static_cast<size_t>(id)].cap -= bottleneck;
-                edges[static_cast<size_t>(id ^ 1)].cap += bottleneck;
-                v = edges[static_cast<size_t>(id ^ 1)].to;
+            if (next < edgeCount) {
+                path.push_back(outgoing[next].to);
+            } else {
+                // Reverse updates lead away from the sink. This dead end stays closed
+                // for the rest of the phase.
+                path.pop_back();
+                if (!path.empty()) ++nextEdge[path.back()];
             }
         }
     }
 
-    // Nodes reachable from `source` through edges with residual capacity.
-    // After maxFlow this is the source side of a minimum cut.
-    std::vector<char> reachableFrom(int source) const {
-        std::vector<char> seen(adj.size(), 0);
-        std::queue<int> queue;
-        seen[static_cast<size_t>(source)] = 1;
-        queue.push(source);
-        while (!queue.empty()) {
-            const int u = queue.front();
-            queue.pop();
-            for (int id : adj[static_cast<size_t>(u)]) {
-                const Edge& e = edges[static_cast<size_t>(id)];
-                if (e.cap > kEps && !seen[static_cast<size_t>(e.to)]) {
-                    seen[static_cast<size_t>(e.to)] = 1;
-                    queue.push(e.to);
-                }
+    std::size_t augmentPath(const std::vector<int>& path, const std::vector<int>& nextEdge) {
+        double bottleneck = kUnboundedCapacity;
+        std::size_t prefixLength = 1;
+        for (std::size_t i = 0; i + 1 < path.size(); ++i) {
+            const int from = path[i];
+            const double residual = edges_[from][nextEdge[from]].residual;
+            if (residual < bottleneck) {
+                bottleneck = residual;
+                prefixLength = i + 1;
             }
         }
-        return seen;
+        // Every path into the sink crosses a finite pixel-energy edge.
+        CV_Assert(std::isfinite(bottleneck));
+
+        for (std::size_t i = 0; i + 1 < path.size(); ++i) {
+            const int from = path[i];
+            FlowEdge& edge = edges_[from][nextEdge[from]];
+            FlowEdge& reverse = edges_[edge.to][edge.reverseIndex];
+            const double reverseResidual = reverse.residual + bottleneck;
+            CV_Assert(std::isfinite(reverseResidual) || reverse.residual == kUnboundedCapacity);
+            edge.residual -= bottleneck;
+            reverse.residual = reverseResidual;
+        }
+        // Keep the prefix ending just before the first saturated edge.
+        return prefixLength;
     }
+
+    std::vector<std::vector<FlowEdge>> edges_;
 };
 
 } // namespace
 
 Seam findSeamGraphCut(const cv::Mat& energy) {
-    // Step 1: validate input. computeEnergy() always gives CV_64FC1.
-    CV_Assert(!energy.empty());
-    CV_Assert(energy.type() == CV_64FC1);
+    CV_Assert(!energy.empty() && energy.dims == 2 && energy.type() == CV_64FC1);
+    CV_Assert(energy.total() <= static_cast<std::size_t>(std::numeric_limits<int>::max() - 2));
 
-    const int rows = energy.rows;
-    const int cols = energy.cols;
+    const int width = energy.cols;
+    const int height = energy.rows;
+    const auto pixel = [width](int row, int col) { return row * width + col; };
+    const int source = static_cast<int>(energy.total());
+    const int sink = source + 1;
+    FlowNetwork network(width, height);
 
-    // Step 2: one node per pixel, plus a source S and a sink T.
-    // Pixel (r, c) is node r * cols + c.
-    const int source = rows * cols;
-    const int sink = rows * cols + 1;
-    auto node = [cols](int r, int c) { return r * cols + c; };
-    FlowGraph graph(rows * cols + 2);
+    for (int row = 0; row < height; ++row) {
+        network.addEdge(source, pixel(row, 0), kUnboundedCapacity);
+        const double* rowEnergy = energy.ptr<double>(row);
+        for (int col = 0; col < width; ++col) {
+            const int vertex = pixel(row, col);
+            const double cost = rowEnergy[col];
+            CV_Assert(std::isfinite(cost) && cost >= 0.0);
 
-    // Idea: a cut splits each row into a left part (source side) and a right
-    // part (sink side). The seam pixel of row r is the LAST source-side pixel,
-    // and cutting through it costs its energy. Infinite edges cannot be cut,
-    // so they are used to force the cut to have the shape of a valid seam.
-    for (int r = 0; r < rows; ++r) {
-        // Step 3: S -> first column, infinite. The left edge is always on the
-        // source side, so every row has at least one source-side pixel.
-        graph.addEdge(source, node(r, 0), kInf);
+            // The last pixel's energy edge goes to the sink, letting the cut
+            // select that pixel even when it is the only column.
+            network.addEdge(vertex, col + 1 < width ? vertex + 1 : sink, cost);
 
-        for (int c = 0; c < cols; ++c) {
-            const double e = energy.at<double>(r, c);
-
-            // Step 4: forward edge with capacity e[r][c]. Cutting it means
-            // pixel (r, c) is the seam pixel of row r. For the last column
-            // the "next pixel" is the sink itself, so a seam can also run
-            // through the last column.
-            if (c + 1 < cols) {
-                graph.addEdge(node(r, c), node(r, c + 1), e);
-                // Step 5: infinite backward edge. If (r, c+1) is on the source
-                // side, (r, c) must be too, so each row is cut exactly once.
-                graph.addEdge(node(r, c + 1), node(r, c), kInf);
-            } else {
-                graph.addEdge(node(r, c), sink, e);
+            if (col == 0) continue;
+            // Backward edges keep each source-side row a contiguous prefix.
+            network.addEdge(vertex, pixel(row, col - 1), kUnboundedCapacity);
+            // Backward diagonals force neighboring rows to reach col - 1.
+            if (row > 0) {
+                network.addEdge(vertex, pixel(row - 1, col - 1), kUnboundedCapacity);
             }
-
-            // Step 6: infinite diagonal edges back to the left, to the rows
-            // above and below. If (r, c) is on the source side, so are
-            // (r-1, c-1) and (r+1, c-1). This makes seam columns in adjacent
-            // rows differ by at most one, i.e. the seam is connected.
-            if (c > 0) {
-                if (r > 0) graph.addEdge(node(r, c), node(r - 1, c - 1), kInf);
-                if (r + 1 < rows) graph.addEdge(node(r, c), node(r + 1, c - 1), kInf);
+            if (row + 1 < height) {
+                network.addEdge(vertex, pixel(row + 1, col - 1), kUnboundedCapacity);
             }
         }
     }
-    // Every S -> T path must cross a finite forward edge (all the infinite
-    // edges point left or come from S), so the max flow is finite.
 
-    // Step 7: max flow = min cut (max-flow min-cut theorem).
-    graph.maxFlow(source, sink);
-
-    // Step 8: the source side of the min cut is everything still reachable
-    // from S in the residual graph. In each row it is a prefix of columns
-    // (because of the backward edges); its rightmost pixel is the seam pixel.
-    const std::vector<char> sourceSide = graph.reachableFrom(source);
-    Seam seam(rows);
-    for (int r = 0; r < rows; ++r) {
-        int last = 0;
-        while (last + 1 < cols && sourceSide[static_cast<size_t>(node(r, last + 1))]) {
-            ++last;
+    const auto sourceSide = network.minCutSourceSide(source, sink);
+    Seam seam(height, -1);
+    // Each row pays for the outgoing energy edge at its last source-side pixel.
+    for (int row = 0; row < height; ++row) {
+        for (int col = width - 1; col >= 0; --col) {
+            if (sourceSide[pixel(row, col)]) {
+                seam[row] = col;
+                break;
+            }
         }
-        seam[r] = last;
     }
-
-    // Size: V = rows*cols + 2 nodes and about 4*rows*cols edges.
-    // Edmonds-Karp is O(V * E^2) in the worst case, so this is far slower
-    // than DP; use small images (e.g. images/input/sample.png).
+    CV_Assert(isValidSeam(seam, height, width));
     return seam;
 }
 
