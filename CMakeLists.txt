@@ -62,3 +62,19 @@ enable_testing()
 add_executable(tests tests/test_seams.cpp)
 target_link_libraries(tests PRIVATE seamlib Catch2::Catch2WithMain)
 add_test(NAME tests COMMAND tests)
+
+# Results harness (bench/results): figures and timings for the report.
+# Not part of the assignment program. Run bench/results/run_results.bat.
+foreach(name eval gcbig grid)
+    add_executable(results_${name} bench/results/${name}.cpp)
+    target_link_libraries(results_${name} PRIVATE seamlib)
+    set_target_properties(results_${name} PROPERTIES
+        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+endforeach()
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    add_executable(results_omp bench/results/omp.cpp)
+    target_link_libraries(results_omp PRIVATE seamlib OpenMP::OpenMP_CXX)
+    set_target_properties(results_omp PROPERTIES
+        VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+endif()

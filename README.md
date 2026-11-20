@@ -70,6 +70,29 @@ build\Release\seam_carve.exe images\input\sample.png images\output\sample_dp.png
 build\Release\benchmark.exe images\input\sample.png 10
 ```
 
+## Reproducing the results (report figures and timings)
+
+The figures and timings in the report and slides come from four small
+programs in `bench/results/`, built with the rest of the solution. They call
+the same library functions as `seam_carve` and do not change it.
+
+Double-click `bench\results\run_results.bat` (after `run.bat` has been run
+once). It builds the Release configuration, runs the unit tests and the four
+programs, and takes about 2 minutes. Everything it prints is saved to
+`images\output\results\windows_output.txt`, and the figures go to
+`images\output\results\` (ignored by Git).
+
+| Program | What it checks or measures |
+| --- | --- |
+| `results_grid` | The 5 x 5 worked example: DP and graph cut give cost 8, greedy 23 |
+| `results_eval` | Seam overlays and outputs for DP, greedy and graph cut; time per seam at five image sizes; seam energy of each method; DP memory and multithreading experiments |
+| `results_omp` | Serial DP against OpenMP DP |
+| `results_gcbig` | One graph-cut seam on the two largest image sizes (about 35 s) |
+
+What to look for: the tests pass, graph cut's seam energy always equals DP's,
+greedy's is higher, and graph cut is far slower than DP. Times depend on the
+machine; the rankings should not.
+
 ## Test images
 
 | File | Size | Use |
@@ -85,6 +108,7 @@ build\Release\benchmark.exe images\input\sample.png 10
 | `src/main.cpp` | Command-line resizer with preview window |
 | `src/visualize.cpp` | Side-by-side view, seam overlay, display window |
 | `bench/benchmark.cpp` | Running-time comparison |
+| `bench/results/` | Programs that produce the report's figures and timings (`run_results.bat`) |
 | `tests/` | Catch2 unit tests |
 | `images/input/`, `images/output/` | Test images and generated results |
 | `report/` | Report material and AI usage log |

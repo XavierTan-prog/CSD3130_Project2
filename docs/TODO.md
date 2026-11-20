@@ -2,7 +2,7 @@
 
 Seam carving with dynamic programming, greedy and graph cut.
 
-- **Submission:** Fri 20 Nov, 23:59 (XSite Dropbox)
+- **Submission:** Sat 21 Nov, 23:59 (XSite Dropbox; the brief says Fri 20 Nov, but the dropboxes are due Sat 21 Nov and close Mon 23 Nov)
 - **Project quiz:** Tue 24 Nov, during tutorial (closed book, on our own code and report)
 
 Tick items off as they are done and put a name in **Owner**. Item numbers
@@ -17,8 +17,8 @@ in brackets refer to the assignment brief.
 | Wed 18 Nov | Graph cut working; benchmark and comparison images produced; bonus features |
 | Fri 20 Nov (actual) | DP, greedy and graph cut done, all 31 tests pass. Remaining: evaluation figures, report, video, submission |
 | Thu 19 Nov | Report written; video recorded |
-| Fri 20 Nov | Final checks; submit well before 23:59 |
-| Sat 21 - Mon 23 Nov | Quiz preparation |
+| Sat 21 Nov | Final checks; submit well before 23:59 |
+| Sun 22 - Mon 23 Nov | Quiz preparation |
 | Tue 24 Nov | Project quiz |
 
 ## 1. Setup (every teammate does this once)
@@ -146,12 +146,12 @@ below on their own machine.
 - [ ] Recorded and uploaded (e.g. YouTube); link works for someone outside the team
 - [ ] Link added to the report
 
-## 8. Submission (9) - Fri 20 Nov, 23:59
+## 8. Submission (9) - Sat 21 Nov, 23:59
 
 - [ ] Final code pushed; `main` builds from a fresh clone with `run.bat`
 - [ ] GitHub repo is accessible to the markers
 - [ ] **XSite Dropbox "Assignment 2 Report Only":** the report
-- [ ] **XSite Dropbox "Assignment 2 Other Materials":** slides and test inputs/outputs, if any
+- [ ] **XSite Dropbox "Assignment 2 Sources and Other Materials":** slides and test inputs/outputs, if any
 - [ ] One person confirms both uploads went through
 
 ## 9. Quiz preparation (6) - Tue 24 Nov
