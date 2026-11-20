@@ -173,20 +173,190 @@ TEST_CASE("sideBySide shrinks large images to fit on screen") {
 // still placeholders. Delete "[.]" from a test once you implement that
 // method, and it will run in CI with the rest.
 
-TEST_CASE("DP finds the optimal seam", "[.][dp]") {
+TEST_CASE("DP finds the optimal seam", "[dp]") {
     const cv::Mat energy = knownEnergy();
     const sc::Seam seam = sc::findSeamDP(energy);
     REQUIRE(seam == sc::Seam{0, 1, 1});
     REQUIRE(sc::seamCost(energy, seam) == 5.0);
 }
 
-TEST_CASE("graph cut matches the DP optimum", "[.][graphcut]") {
+TEST_CASE("graph cut matches the DP optimum", "[graphcut]") {
     const cv::Mat energy = knownEnergy();
     REQUIRE(sc::seamCost(energy, sc::findSeamGraphCut(energy)) == 5.0);
 }
 
-TEST_CASE("greedy never beats DP", "[.][greedy]") {
+TEST_CASE("greedy never beats DP", "[greedy]") {
     const cv::Mat energy = knownEnergy();
     REQUIRE(sc::seamCost(energy, sc::findSeamGreedy(energy)) >=
             sc::seamCost(energy, sc::findSeamDP(energy)));
+}
+
+// Edge cases and a case where greedy is strictly worse than DP.
+
+namespace {
+
+// Greedy starts at the cheap 1 in the top-left and gets stuck among the 9s
+// (1 + 9 + 9 = 19). The optimum starts at a 5 and drops to the 1s (5+1+1 = 7).
+cv::Mat greedyTrapEnergy() {
+    return (cv::Mat_<double>(3, 3) << 1, 5, 5,
+                                      9, 9, 1,
+                                      9, 9, 1);
+}
+
+// Brute force over every seam, for checking DP on small maps.
+double bruteForceMinCost(const cv::Mat& e, int r, int c) {
+    const double here = e.at<double>(r, c);
+    if (r == e.rows - 1) return here;
+    double best = -1.0;
+    for (int k = c - 1; k <= c + 1; ++k) {
+        if (k < 0 || k >= e.cols) continue;
+        const double sub = bruteForceMinCost(e, r + 1, k);
+        if (best < 0.0 || sub < best) best = sub;
+    }
+    return here + best;
+}
+
+} // namespace
+
+TEST_CASE("greedy can be strictly worse than DP", "[dp][greedy]") {
+    const cv::Mat energy = greedyTrapEnergy();
+    const sc::Seam dp = sc::findSeamDP(energy);
+    const sc::Seam greedy = sc::findSeamGreedy(energy);
+    REQUIRE(sc::isValidSeam(dp, energy.rows, energy.cols));
+    REQUIRE(sc::isValidSeam(greedy, energy.rows, energy.cols));
+    REQUIRE(sc::seamCost(energy, dp) == 7.0);
+    REQUIRE(sc::seamCost(energy, greedy) == 19.0);
+}
+
+TEST_CASE("DP matches brute force on a pattern image", "[dp]") {
+    const cv::Mat energy = sc::computeEnergy(patternImage());
+    double best = -1.0;
+    for (int c = 0; c < energy.cols; ++c) {
+        const double cost = bruteForceMinCost(energy, 0, c);
+        if (best < 0.0 || cost < best) best = cost;
+    }
+    const sc::Seam seam = sc::findSeamDP(energy);
+    REQUIRE(sc::isValidSeam(seam, energy.rows, energy.cols));
+    REQUIRE(sc::seamCost(energy, seam) == best);
+}
+
+TEST_CASE("DP and greedy handle a one-column image", "[dp][greedy]") {
+    const cv::Mat energy = (cv::Mat_<double>(4, 1) << 3, 1, 4, 1);
+    REQUIRE(sc::findSeamDP(energy) == sc::Seam{0, 0, 0, 0});
+    REQUIRE(sc::findSeamGreedy(energy) == sc::Seam{0, 0, 0, 0});
+}
+
+TEST_CASE("DP and greedy handle a one-row image", "[dp][greedy]") {
+    const cv::Mat energy = (cv::Mat_<double>(1, 5) << 4, 2, 7, 1, 3);
+    REQUIRE(sc::findSeamDP(energy) == sc::Seam{3});
+    REQUIRE(sc::findSeamGreedy(energy) == sc::Seam{3});
+}
+
+TEST_CASE("DP and greedy break ties to the leftmost column", "[dp][greedy]") {
+    const cv::Mat energy(3, 4, CV_64FC1, cv::Scalar(2.0));
+    REQUIRE(sc::findSeamDP(energy) == sc::Seam{0, 0, 0});
+    REQUIRE(sc::findSeamGreedy(energy) == sc::Seam{0, 0, 0});
+}
+
+TEST_CASE("graph cut returns a valid seam with the DP cost", "[graphcut]") {
+    const cv::Mat pattern = sc::computeEnergy(patternImage());
+    for (const cv::Mat& energy : {knownEnergy(), greedyTrapEnergy(), pattern}) {
+        const sc::Seam cut = sc::findSeamGraphCut(energy);
+        REQUIRE(sc::isValidSeam(cut, energy.rows, energy.cols));
+        REQUIRE(sc::seamCost(energy, cut) == sc::seamCost(energy, sc::findSeamDP(energy)));
+    }
+}
+
+TEST_CASE("graph cut can put the seam in the last column", "[graphcut]") {
+    // The cheapest pixels are all in the last column.
+    const cv::Mat energy = (cv::Mat_<double>(3, 3) << 9, 9, 1,
+                                                      9, 9, 1,
+                                                      9, 9, 1);
+    REQUIRE(sc::findSeamGraphCut(energy) == sc::Seam{2, 2, 2});
+}
+
+TEST_CASE("graph cut handles one-column and one-row images", "[graphcut]") {
+    const cv::Mat column = (cv::Mat_<double>(4, 1) << 3, 1, 4, 1);
+    REQUIRE(sc::findSeamGraphCut(column) == sc::Seam{0, 0, 0, 0});
+    const cv::Mat row = (cv::Mat_<double>(1, 5) << 4, 2, 7, 1, 3);
+    REQUIRE(sc::findSeamGraphCut(row) == sc::Seam{3});
+}
+
+TEST_CASE("graph cut rejects invalid energy maps", "[graphcut]") {
+    REQUIRE_THROWS_AS(sc::findSeamGraphCut(cv::Mat()), cv::Exception);
+    REQUIRE_THROWS_AS(sc::findSeamGraphCut(cv::Mat(3, 3, CV_8UC1, cv::Scalar(0))), cv::Exception);
+}
+
+TEST_CASE("DP and greedy reject invalid energy maps", "[dp][greedy]") {
+    REQUIRE_THROWS_AS(sc::findSeamDP(cv::Mat()), cv::Exception);
+    REQUIRE_THROWS_AS(sc::findSeamGreedy(cv::Mat()), cv::Exception);
+    const cv::Mat wrongType(3, 3, CV_8UC1, cv::Scalar(0));
+    REQUIRE_THROWS_AS(sc::findSeamDP(wrongType), cv::Exception);
+    REQUIRE_THROWS_AS(sc::findSeamGreedy(wrongType), cv::Exception);
+}
+
+TEST_CASE("DP and greedy pick the leftmost cell on a tie while backtracking", "[dp][greedy]") {
+    // M = 1 1 5 / 6 1 6 / 6 1 6. DP ends at column 1 (M = 1), and when
+    // backtracking into row 0 columns 0 and 1 tie at M = 1, so it takes 0.
+    // Greedy also starts at the leftmost of the two 1s in the top row.
+    const cv::Mat energy = (cv::Mat_<double>(3, 3) << 1, 1, 5,
+                                                      5, 0, 5,
+                                                      5, 0, 5);
+    REQUIRE(sc::findSeamDP(energy) == sc::Seam{0, 1, 1});
+    REQUIRE(sc::findSeamGreedy(energy) == sc::Seam{0, 1, 1});
+    REQUIRE(sc::seamCost(energy, sc::findSeamDP(energy)) == 1.0);
+}
+
+TEST_CASE("DP and greedy find horizontal seams on the transposed map", "[dp][greedy]") {
+    // The cheap horizontal path runs along row 1 then steps down to row 2:
+    // rows {1, 1, 2, 2} for columns 0..3, cost 4. carve() finds horizontal
+    // seams by transposing, so the vertical seam of energy.t() must be it.
+    const cv::Mat energy = (cv::Mat_<double>(3, 4) << 9, 9, 9, 9,
+                                                      1, 1, 9, 9,
+                                                      9, 9, 1, 1);
+    const cv::Mat transposed = energy.t();
+    for (const sc::Seam& seam : {sc::findSeamDP(transposed), sc::findSeamGreedy(transposed)}) {
+        REQUIRE(seam == sc::Seam{1, 1, 2, 2});
+        REQUIRE(sc::seamCost(transposed, seam) == 4.0);
+    }
+}
+
+TEST_CASE("DP and greedy carve both width and height", "[dp][greedy]") {
+    const cv::Mat img = patternImage(); // 9 wide, 7 tall
+    for (sc::Method m : {sc::Method::DP, sc::Method::Greedy}) {
+        const cv::Mat narrower = sc::carve(img, 6, 7, m);
+        REQUIRE(narrower.cols == 6);
+        REQUIRE(narrower.rows == 7);
+        const cv::Mat shorter = sc::carve(img, 9, 4, m);
+        REQUIRE(shorter.cols == 9);
+        REQUIRE(shorter.rows == 4);
+        const cv::Mat both = sc::carve(img, 5, 5, m);
+        REQUIRE(both.cols == 5);
+        REQUIRE(both.rows == 5);
+        REQUIRE(both.type() == img.type());
+    }
+}
+
+TEST_CASE("DP is optimal and greedy never beats it on random maps", "[dp][greedy]") {
+    // 50 random 6x7 energy maps with small integer values (lots of ties).
+    cv::RNG rng(12345); // fixed seed: the same maps every run
+    for (int trial = 0; trial < 50; ++trial) {
+        cv::Mat energy(6, 7, CV_64FC1);
+        for (int r = 0; r < energy.rows; ++r) {
+            for (int c = 0; c < energy.cols; ++c) {
+                energy.at<double>(r, c) = rng.uniform(0, 10);
+            }
+        }
+        double best = -1.0;
+        for (int c = 0; c < energy.cols; ++c) {
+            const double cost = bruteForceMinCost(energy, 0, c);
+            if (best < 0.0 || cost < best) best = cost;
+        }
+        const sc::Seam dp = sc::findSeamDP(energy);
+        const sc::Seam greedy = sc::findSeamGreedy(energy);
+        REQUIRE(sc::isValidSeam(dp, energy.rows, energy.cols));
+        REQUIRE(sc::isValidSeam(greedy, energy.rows, energy.cols));
+        REQUIRE(sc::seamCost(energy, dp) == best);
+        REQUIRE(sc::seamCost(energy, greedy) >= best);
+    }
 }

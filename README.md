@@ -34,7 +34,7 @@ Everything else is launched from Visual Studio. Right-click a project >
 | Project | What it does | Default arguments |
 | --- | --- | --- |
 | `seam_carve` (default) | Asks which image, target size and method to use, resizes, then shows original and result side by side | none (interactive) |
-| `benchmark` | Times the three methods | `images/input/Broadway_tower_edit.jpg 10` |
+| `benchmark` | Times the three methods | `images/input/sample.png 10` |
 | `tests` | Runs the unit tests | none |
 
 `seam_carve` lists the images in `images\input\`; pick one by number or type
@@ -85,8 +85,8 @@ build\Release\benchmark.exe images\input\Broadway_tower_edit.jpg 10
 
 ## Status
 
-- [ ] Energy map (`src/energy.cpp`)
-- [ ] DP seam (`src/dp.cpp`)
-- [ ] Greedy seam (`src/greedy.cpp`)
-- [ ] Graph-cut seam (`src/graph_cut.cpp`)
+- [x] Energy map (`src/energy.cpp`)
+- [x] DP seam (`src/dp.cpp`)
+- [x] Greedy seam (`src/greedy.cpp`)
+- [x] Graph-cut seam (`src/graph_cut.cpp`)
 - [ ] Seam visualisation / interactive demo (bonus)

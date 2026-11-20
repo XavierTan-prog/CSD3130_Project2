@@ -55,7 +55,7 @@ set_target_properties(seam_carve PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 set_target_properties(benchmark PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    VS_DEBUGGER_COMMAND_ARGUMENTS "images/input/Broadway_tower_edit.jpg 10")
+    VS_DEBUGGER_COMMAND_ARGUMENTS "images/input/sample.png 10")
 
 # Unit tests.
 enable_testing()
