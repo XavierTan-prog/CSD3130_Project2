@@ -337,6 +337,106 @@ TEST_CASE("DP and greedy carve both width and height", "[dp][greedy]") {
     }
 }
 
+// Step-by-step visualisation: carve() reports every seam before removing it.
+
+TEST_CASE("carve reports every seam to the callback in order", "[visualise]") {
+    const cv::Mat img = patternImage(); // 9 wide, 7 tall
+    int vertical = 0;
+    int horizontal = 0;
+    int expectedCols = img.cols;
+    int expectedRows = img.rows;
+    const sc::SeamCallback onSeam = [&](const cv::Mat& current, const sc::Seam& seam,
+                                        bool isHorizontal) {
+        // The image is always upright and shrinks by one each step.
+        REQUIRE(current.cols == expectedCols);
+        REQUIRE(current.rows == expectedRows);
+        if (isHorizontal) {
+            REQUIRE(vertical == 3); // all vertical seams come first
+            REQUIRE(sc::isValidSeam(seam, current.cols, current.rows));
+            ++horizontal;
+            --expectedRows;
+        } else {
+            REQUIRE(horizontal == 0);
+            REQUIRE(sc::isValidSeam(seam, current.rows, current.cols));
+            ++vertical;
+            --expectedCols;
+        }
+        return true;
+    };
+    const cv::Mat out = sc::carve(img, 6, 5, sc::Method::DP, onSeam);
+    REQUIRE(vertical == 3);
+    REQUIRE(horizontal == 2);
+    REQUIRE(out.cols == 6);
+    REQUIRE(out.rows == 5);
+}
+
+TEST_CASE("the callback sees the same seam the method finds", "[visualise]") {
+    const cv::Mat img = patternImage();
+    bool first = true;
+    const sc::SeamCallback onSeam = [&](const cv::Mat& current, const sc::Seam& seam, bool) {
+        if (first) REQUIRE(seam == sc::findSeamDP(sc::computeEnergy(current)));
+        first = false;
+        return true;
+    };
+    sc::carve(img, 8, 7, sc::Method::DP, onSeam);
+    REQUIRE_FALSE(first);
+}
+
+TEST_CASE("carve with a callback gives the same result as without", "[visualise]") {
+    const cv::Mat img = patternImage();
+    const sc::SeamCallback ignore = [](const cv::Mat&, const sc::Seam&, bool) { return true; };
+    for (sc::Method m : {sc::Method::DP, sc::Method::Greedy}) {
+        const cv::Mat plain = sc::carve(img, 6, 5, m);
+        const cv::Mat watched = sc::carve(img, 6, 5, m, ignore);
+        REQUIRE(cv::norm(plain, watched, cv::NORM_INF) == 0.0);
+    }
+}
+
+TEST_CASE("returning false stops the callback but carving still finishes", "[visualise]") {
+    const cv::Mat img = patternImage();
+    int calls = 0;
+    const sc::SeamCallback stopAfterTwo = [&](const cv::Mat&, const sc::Seam&, bool) {
+        ++calls;
+        return calls < 2;
+    };
+    const cv::Mat out = sc::carve(img, 5, 4, sc::Method::Greedy, stopAfterTwo);
+    REQUIRE(calls == 2);
+    REQUIRE(out.cols == 5);
+    REQUIRE(out.rows == 4);
+}
+
+TEST_CASE("drawHorizontalSeam paints one pixel per column", "[visualise]") {
+    const cv::Mat img(3, 4, CV_8UC3, cv::Scalar(10, 20, 30));
+    const cv::Mat out = sc::drawHorizontalSeam(img, {0, 1, 2, 2});
+    REQUIRE(out.at<cv::Vec3b>(0, 0) == cv::Vec3b(0, 0, 255));
+    REQUIRE(out.at<cv::Vec3b>(1, 1) == cv::Vec3b(0, 0, 255));
+    REQUIRE(out.at<cv::Vec3b>(2, 2) == cv::Vec3b(0, 0, 255));
+    REQUIRE(out.at<cv::Vec3b>(2, 3) == cv::Vec3b(0, 0, 255));
+    REQUIRE(out.at<cv::Vec3b>(0, 1) == cv::Vec3b(10, 20, 30));
+    REQUIRE(img.at<cv::Vec3b>(0, 0) == cv::Vec3b(10, 20, 30)); // input untouched
+    REQUIRE_THROWS_AS(sc::drawHorizontalSeam(img, {0, 1, 2}), cv::Exception); // too short
+}
+
+TEST_CASE("renderSeamStep draws a visible red seam for both directions", "[visualise]") {
+    const cv::Mat img(30, 40, CV_8UC3, cv::Scalar(200, 200, 200));
+    const auto hasRed = [](const cv::Mat& canvas) {
+        for (int r = 0; r < canvas.rows; ++r)
+            for (int c = 0; c < canvas.cols; ++c)
+                if (canvas.at<cv::Vec3b>(r, c) == cv::Vec3b(0, 0, 255)) return true;
+        return false;
+    };
+    const cv::Mat v = sc::renderSeamStep(img, sc::Seam(30, 5), false, "vertical");
+    const cv::Mat h = sc::renderSeamStep(img, sc::Seam(40, 7), true, "horizontal");
+    for (const cv::Mat* canvas : {&v, &h}) {
+        REQUIRE(canvas->type() == CV_8UC3);
+        REQUIRE(canvas->cols > img.cols);
+        REQUIRE(canvas->rows > img.rows);
+        REQUIRE(hasRed(*canvas));
+    }
+    REQUIRE_THROWS_AS(sc::renderSeamStep(img, sc::Seam(40, 7), false, "wrong length"),
+                      cv::Exception);
+}
+
 TEST_CASE("DP is optimal and greedy never beats it on random maps", "[dp][greedy]") {
     // 50 random 6x7 energy maps with small integer values (lots of ties).
     cv::RNG rng(12345); // fixed seed: the same maps every run

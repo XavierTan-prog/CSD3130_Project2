@@ -20,4 +20,36 @@ cv::Mat sideBySide(const cv::Mat& left, const std::string& leftLabel,
 // window is closed.
 void showWindow(const std::string& title, const cv::Mat& image);
 
+// Like drawSeam, for a horizontal seam: seam[c] is the row painted in column c.
+cv::Mat drawHorizontalSeam(const cv::Mat& img, const Seam& seam,
+                           const cv::Scalar& colour = cv::Scalar(0, 0, 255));
+
+// One frame of the step-by-step view: `img` (CV_8UC3) scaled to fit on
+// screen, the seam drawn over it as a red line that stays visible after
+// scaling, and `label` plus the key help above it.
+cv::Mat renderSeamStep(const cv::Mat& img, const Seam& seam, bool horizontal,
+                       const std::string& label);
+
+// Step-by-step visualisation (bonus item): pass it to carve() as the seam
+// callback (wrapped in std::ref) and it shows every seam before it is
+// removed. Keys in the window: Space pauses/resumes, N steps one seam while
+// paused, Esc skips the rest of the animation (carving still finishes).
+class SeamStepViewer {
+public:
+    SeamStepViewer(std::string title, std::string methodName, int totalSeams, int delayMs);
+
+    // Matches sc::SeamCallback. Returns false once the user skips or closes the window.
+    bool operator()(const cv::Mat& img, const Seam& seam, bool horizontal);
+
+    int stepsShown() const { return step_; }
+
+private:
+    std::string title_;
+    std::string method_;
+    int total_;
+    int delayMs_;
+    int step_ = 0;
+    bool paused_ = false;
+};
+
 } // namespace sc

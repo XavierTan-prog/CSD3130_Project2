@@ -119,7 +119,7 @@ below on their own machine.
 
 | Done | Task | Owner |
 | --- | --- | --- |
-| [ ] | Step-by-step visualisation showing every seam as it is removed | |
+| [x] | Step-by-step visualisation showing every seam as it is removed (`seam_carve`: answer "y" to "Show each seam", or `--steps`; Space pause, N next, Esc skip) | Nelson |
 | [ ] | Interactive resizing: user changes the image size live (e.g. trackbars) | |
 | [ ] | CI/CD: workflow builds and tests on every push (started; keep it green) | |
 
