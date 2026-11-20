@@ -46,8 +46,8 @@ below on their own machine.
 
 - [ ] In Visual Studio: **Build > Build Solution**. It should finish with no errors.
 - [ ] Press **Ctrl+F5** (startup project `seam_carve`). Press Enter at each prompt to accept the defaults. A window should open showing the original image next to the result.
-  - The result looks like a plain crop for now. That is expected: the algorithms are still placeholders.
-- [ ] Right-click the **`tests`** project > **Set as Startup Project**, press **Ctrl+F5**. Expect `All tests passed` (three more tests are hidden until the algorithms are written).
+  - The default DP result looks like a plain crop until DP is implemented.
+- [ ] Right-click the **`tests`** project > **Set as Startup Project**, press **Ctrl+F5**. Expect `All tests passed`. The DP and greedy tests stay hidden until their methods are ready.
 - [ ] Set `seam_carve` back as the startup project.
 
 ### 1.5 If something goes wrong
@@ -84,7 +84,7 @@ below on their own machine.
 | [ ] | Energy map, e.g. Sobel gradient magnitude (1a). **Do first: everything depends on it.** | `src/energy.cpp` | |
 | [ ] | DP minimum seam: fill the table, backtrack (1b) | `src/dp.cpp` | |
 | [ ] | Greedy seam: row-by-row local choice (3) | `src/greedy.cpp` | |
-| [ ] | Graph-cut seam: build the graph, max-flow, read the cut (4) | `src/graph_cut.cpp` | |
+| [x] | Graph-cut seam: build the graph, max-flow, read the cut (4) | `src/graph_cut.cpp` | chuuniby |
 
 - [ ] Vertical and horizontal seams both work for all three methods (1). The transpose handling is already in `src/carve.cpp`; check the results.
 - [ ] Remove the `[.]` tag from each hidden test in `tests/test_seams.cpp` as its method is finished
