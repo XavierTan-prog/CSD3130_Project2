@@ -1,7 +1,8 @@
 // seam_carve: resizes an image and shows the original next to the result.
 //
 // With no arguments it asks which image to use, the target size and the
-// method. With arguments it runs straight away:
+// method, and after each result offers to run again (same image or another
+// one) until you choose to quit. With arguments it runs once straight away:
 //   seam_carve <input> <output> <width> <height> [dp|greedy|graphcut] [--no-show] [--steps[=MS]]
 #include <algorithm>
 #include <cctype>
@@ -41,11 +42,17 @@ std::string clean(std::string text) {
     return text;
 }
 
+// Thrown when the console input ends (Ctrl+Z / Ctrl+D, or a closed pipe).
+// The interactive loop treats it as "quit".
+struct EndOfInput : std::runtime_error {
+    EndOfInput() : std::runtime_error("no input available") {}
+};
+
 // Prints the prompt and reads one line. An empty answer means "use the default".
 std::string ask(const std::string& prompt) {
     std::cout << prompt << std::flush;
     std::string line;
-    if (!std::getline(std::cin, line)) throw std::runtime_error("no input available");
+    if (!std::getline(std::cin, line)) throw EndOfInput();
     return clean(line);
 }
 
@@ -101,6 +108,7 @@ std::vector<fs::path> listImages(const fs::path& dir) {
 // Asks which image to use until one loads. Returns its path; fills `img`.
 fs::path askImage(cv::Mat& img) {
     for (;;) {
+        img.release(); // never fall back to a previously loaded image
         const std::vector<fs::path> images = listImages(kInputDir);
         std::string prompt;
         if (images.empty()) {
@@ -155,7 +163,7 @@ int resizeAndShow(const cv::Mat& img, const fs::path& outputPath, int width, int
         std::cout << "Showing each seam before it is removed. In the window: Space pauses, "
                      "N steps while paused, Esc skips to the result.\n";
         sc::SeamStepViewer viewer("Seam carving: step by step", sc::methodName(method),
-                                  totalSeams, stepDelayMs);
+                                  totalSeams, stepDelayMs, cv::Size(width, height));
         result = sc::carve(img, width, height, method, std::ref(viewer));
         cv::destroyAllWindows();
         if (viewer.stepsShown() < totalSeams) {
@@ -185,9 +193,9 @@ int resizeAndShow(const cv::Mat& img, const fs::path& outputPath, int width, int
     return 0;
 }
 
-int runInteractive(bool show) {
-    cv::Mat img;
-    const fs::path inputPath = askImage(img);
+// Asks for the target size, method and step-by-step option for `img`, then
+// resizes it. Used once per round of the interactive loop.
+int resizeInteractive(const fs::path& inputPath, const cv::Mat& img, bool show) {
     std::cout << inputPath.filename().string() << " is " << sizeText(img) << ".\n";
 
     const int width = askInt("Target width ", 1, img.cols, std::max(1, img.cols * 3 / 4));
@@ -203,6 +211,52 @@ int runInteractive(bool show) {
     const fs::path outputPath = fs::path(kOutputDir) /
         (inputPath.stem().string() + "_" + sc::methodName(method) + ".png");
     return resizeAndShow(img, outputPath, width, height, method, show, stepDelayMs);
+}
+
+enum class NextStep { SameImage, OtherImage, Quit };
+
+NextStep askNextStep() {
+    std::cout << "\nWhat next?\n"
+                 "  1) Resize the same image again (e.g. another size or method)\n"
+                 "  2) Choose another image\n"
+                 "  3) Quit\n";
+    for (;;) {
+        std::string answer = ask("Choose 1, 2 or 3 [1]: ");
+        std::transform(answer.begin(), answer.end(), answer.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (answer.empty() || answer == "1" || answer == "s" || answer == "same") return NextStep::SameImage;
+        if (answer == "2" || answer == "o" || answer == "other") return NextStep::OtherImage;
+        if (answer == "3" || answer == "q" || answer == "quit" || answer == "exit") return NextStep::Quit;
+        std::cout << "  Please enter 1, 2 or 3.\n";
+    }
+}
+
+// Keeps resizing until the user chooses to quit. An error in one round
+// (e.g. an image that cannot be saved) is reported and the loop carries on.
+int runInteractive(bool show) {
+    cv::Mat img;
+    fs::path inputPath = askImage(img);
+    for (;;) {
+        try {
+            resizeInteractive(inputPath, img, show);
+        } catch (const EndOfInput&) {
+            throw;
+        } catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << "\n";
+        }
+
+        switch (askNextStep()) {
+        case NextStep::SameImage:
+            std::cout << "\n";
+            break;
+        case NextStep::OtherImage:
+            std::cout << "\n";
+            inputPath = askImage(img);
+            break;
+        case NextStep::Quit:
+            return 0;
+        }
+    }
 }
 
 int runWithArguments(const std::vector<std::string>& args, bool show, int stepDelayMs) {
@@ -256,7 +310,14 @@ int main(int argc, char** argv) {
     }
 
     try {
-        if (args.empty()) return runInteractive(show);
+        if (args.empty()) {
+            try {
+                return runInteractive(show);
+            } catch (const EndOfInput&) {
+                std::cout << "\n";
+                return 0; // input closed: treat it as quitting
+            }
+        }
         if (args.size() < 4) {
             std::cerr << "Usage: seam_carve                      (asks for everything)\n"
                          "       seam_carve <input> <output> <width> <height> "

@@ -33,13 +33,18 @@ Everything else is launched from Visual Studio. Right-click a project >
 
 | Project | What it does | Default arguments |
 | --- | --- | --- |
-| `seam_carve` (default) | Asks which image, target size and method to use, resizes, then shows original and result side by side | none (interactive) |
+| `seam_carve` (default) | Asks which image, target size and method to use, resizes, shows original and result side by side, then offers to run again | none (interactive) |
 | `benchmark` | Times the three methods | `images/input/sample.png 10` |
 | `tests` | Runs the unit tests | none |
 
 `seam_carve` lists the images in `images\input\`; pick one by number or type
 (or drag in) any file path. Pressing Enter accepts the default shown in
 brackets. The result is saved to `images\output\<name>_<method>.png`.
+
+After each result (once you close the image window) it asks what to do
+next: `1` resizes the same image again (try another size or method), `2`
+picks another image, `3` quits. Running the same image with the same method
+again overwrites its previous output file.
 
 Answer `y` to "Show each seam as it is removed?" for the step-by-step view:
 each seam is drawn in red on the current image before it is removed. In

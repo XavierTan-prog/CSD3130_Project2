@@ -88,8 +88,14 @@ cv::Mat drawHorizontalSeam(const cv::Mat& img, const Seam& seam, const cv::Scala
     return out;
 }
 
+double stepViewScale(int cols, int rows) {
+    double scale = std::min(1200.0 / cols, 650.0 / rows);
+    if (scale >= 1.0) scale = std::min(std::floor(scale), 4.0);
+    return scale;
+}
+
 cv::Mat renderSeamStep(const cv::Mat& img, const Seam& seam, bool horizontal,
-                       const std::string& label) {
+                       const std::string& label, double scale, cv::Size frame) {
     CV_Assert(img.type() == CV_8UC3);
     CV_Assert(horizontal ? isValidSeam(seam, img.cols, img.rows)
                          : isValidSeam(seam, img.rows, img.cols));
@@ -99,12 +105,8 @@ cv::Mat renderSeamStep(const cv::Mat& img, const Seam& seam, bool horizontal,
 
     // Same fitting rule as sideBySide: shrink large images, enlarge small
     // ones by a whole number (up to 4x) so their pixels stay sharp.
-    double scale = std::min(1200.0 / img.cols, 650.0 / img.rows);
-    int interpolation = cv::INTER_AREA;
-    if (scale >= 1.0) {
-        scale = std::min(std::floor(scale), 4.0);
-        interpolation = cv::INTER_NEAREST;
-    }
+    if (scale <= 0.0) scale = stepViewScale(img.cols, img.rows);
+    const int interpolation = (scale >= 1.0) ? cv::INTER_NEAREST : cv::INTER_AREA;
     cv::Mat view;
     cv::resize(img, view,
                cv::Size(std::max(1, static_cast<int>(std::lround(img.cols * scale))),
@@ -124,7 +126,9 @@ cv::Mat renderSeamStep(const cv::Mat& img, const Seam& seam, bool horizontal,
     const int thickness = std::max(2, static_cast<int>(std::lround(scale)));
     cv::polylines(view, points, false, cv::Scalar(0, 0, 255), thickness, cv::LINE_8);
 
-    cv::Mat canvas(header + view.rows + gap, gap + std::max(view.cols, 420) + gap, CV_8UC3,
+    const int areaCols = std::max(view.cols, static_cast<int>(std::lround(frame.width * scale)));
+    const int areaRows = std::max(view.rows, static_cast<int>(std::lround(frame.height * scale)));
+    cv::Mat canvas(header + areaRows + gap, gap + std::max(areaCols, 420) + gap, CV_8UC3,
                    cv::Scalar(40, 40, 40));
     view.copyTo(canvas(cv::Rect(gap, header, view.cols, view.rows)));
     cv::putText(canvas, label, cv::Point(gap, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5,
@@ -136,21 +140,23 @@ cv::Mat renderSeamStep(const cv::Mat& img, const Seam& seam, bool horizontal,
 }
 
 SeamStepViewer::SeamStepViewer(std::string title, std::string methodName, int totalSeams,
-                               int delayMs)
+                               int delayMs, cv::Size target)
     : title_(std::move(title)), method_(std::move(methodName)), total_(totalSeams),
-      delayMs_(std::max(1, delayMs)) {} // waitKey(0) would wait forever, so at least 1 ms
+      delayMs_(std::max(1, delayMs)), target_(target) {} // waitKey(0) would wait forever, so at least 1 ms
 
 bool SeamStepViewer::operator()(const cv::Mat& img, const Seam& seam, bool horizontal) {
-    ++step_;
-    const std::string before = std::to_string(img.cols) + "x" + std::to_string(img.rows);
-    const std::string after = horizontal
-        ? std::to_string(img.cols) + "x" + std::to_string(img.rows - 1)
-        : std::to_string(img.cols - 1) + "x" + std::to_string(img.rows);
-    const std::string label = method_ + "  |  seam " + std::to_string(step_) + " of " +
-                              std::to_string(total_) + "  |  " +
-                              (horizontal ? "horizontal" : "vertical") + "  |  " + before +
-                              " -> " + after;
-    cv::imshow(title_, renderSeamStep(img, seam, horizontal, label));
+    if (++step_ == 1) {
+        // Fix the zoom and frame on the original size, so later frames show the
+        // picture shrinking instead of being re-zoomed to fill the window.
+        start_ = img.size();
+        scale_ = stepViewScale(img.cols, img.rows);
+    }
+    const auto text = [](cv::Size s) { return std::to_string(s.width) + "x" + std::to_string(s.height); };
+    std::string label = method_ + "  |  seam " + std::to_string(step_) + " of " +
+                        std::to_string(total_) + " (" + (horizontal ? "horizontal" : "vertical") +
+                        ")  |  now " + text(img.size());
+    if (target_.area() > 0) label += "  |  " + text(start_) + " -> " + text(target_);
+    cv::imshow(title_, renderSeamStep(img, seam, horizontal, label, scale_, start_));
 
     for (;;) {
         const int key = cv::waitKey(paused_ ? 50 : delayMs_);

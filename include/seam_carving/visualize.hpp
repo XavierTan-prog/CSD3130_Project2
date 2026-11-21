@@ -24,11 +24,20 @@ void showWindow(const std::string& title, const cv::Mat& image);
 cv::Mat drawHorizontalSeam(const cv::Mat& img, const Seam& seam,
                            const cv::Scalar& colour = cv::Scalar(0, 0, 255));
 
+// Scale used to fit a cols x rows image on screen in the step-by-step view:
+// large images are shrunk, small ones enlarged by a whole number (up to 4x).
+double stepViewScale(int cols, int rows);
+
 // One frame of the step-by-step view: `img` (CV_8UC3) scaled to fit on
 // screen, the seam drawn over it as a red line that stays visible after
 // scaling, and `label` plus the key help above it.
+// `scale` > 0 fixes the zoom instead of fitting this image, and `frame`
+// (cols x rows of the image area, before scaling) fixes the canvas size, so
+// every frame of an animation has the same zoom and window size and the
+// picture visibly gets narrower / shorter inside the frame.
 cv::Mat renderSeamStep(const cv::Mat& img, const Seam& seam, bool horizontal,
-                       const std::string& label);
+                       const std::string& label, double scale = 0.0,
+                       cv::Size frame = cv::Size());
 
 // Step-by-step visualisation (bonus item): pass it to carve() as the seam
 // callback (wrapped in std::ref) and it shows every seam before it is
@@ -36,7 +45,9 @@ cv::Mat renderSeamStep(const cv::Mat& img, const Seam& seam, bool horizontal,
 // paused, Esc skips the rest of the animation (carving still finishes).
 class SeamStepViewer {
 public:
-    SeamStepViewer(std::string title, std::string methodName, int totalSeams, int delayMs);
+    // `target` is the final size, shown in the label (optional).
+    SeamStepViewer(std::string title, std::string methodName, int totalSeams, int delayMs,
+                   cv::Size target = cv::Size());
 
     // Matches sc::SeamCallback. Returns false once the user skips or closes the window.
     bool operator()(const cv::Mat& img, const Seam& seam, bool horizontal);
@@ -48,6 +59,9 @@ private:
     std::string method_;
     int total_;
     int delayMs_;
+    cv::Size target_;
+    cv::Size start_;      // size of the image at the first seam
+    double scale_ = 0.0;  // zoom fixed at the first seam
     int step_ = 0;
     bool paused_ = false;
 };
